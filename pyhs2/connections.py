@@ -9,7 +9,7 @@ from twitter.thrift_sasl import TSaslClientTransport
 
 
 class Connection(object):
-    def __init__(self, host=None, port=10000, authMechanism="PLAIN", username=None, password=None, database=None,
+    def __init__(self, host=None, port=10000, authMechanism="PLAIN", user=None, password=None, database=None,
                  configuration=None, timeout=None):
         authMechanisms = {"PLAIN", "NOSASL"}
         if authMechanism not in authMechanisms:
@@ -23,10 +23,10 @@ class Connection(object):
         else:  # authMechanism == "PLAIN":
             password = "password" if (password is None or len(password) == 0) else password
             transport = TSaslClientTransport(socket, host=host, service=None, mechanism=authMechanism,
-                                             username=username, password=password)
+                                             username=user, password=password)
         self.client = TCLIService.Client(TBinaryProtocol(transport))
         transport.open()
-        res = self.client.OpenSession(TOpenSessionReq(username=username, password=password, configuration=configuration))
+        res = self.client.OpenSession(TOpenSessionReq(username=user, password=password, configuration=configuration))
         self.session = res.sessionHandle
         if database is not None:
             with self.cursor() as cur:
