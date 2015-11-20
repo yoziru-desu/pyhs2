@@ -49,11 +49,18 @@ class Cursor(object):
     _standbyBlock = None
     _blockRequestInProgress = False
     _cursorLock = None
+    _description = None
 
     def __init__(self, _client, sessionHandle):
         self.session = sessionHandle
         self.client = _client
         self._cursorLock = threading.RLock()
+        self._description = []
+
+    @property
+    def description( self ):
+        # PEP 249
+        return self._description
 
     def execute(self, hql):
         self.hasMoreRows = True
@@ -63,6 +70,10 @@ class Cursor(object):
         if res.status.errorCode is not None:
             raise Pyhs2Exception(res.status.errorCode, res.status.errorMessage)
         
+        cols = self.getSchema()
+        if cols is not None:
+            self._description = [( col['columnName'], col['type'], None, None, None, None, None )  for col in cols]
+
     def fetch(self):
         rows = []
         while self.hasMoreRows:
@@ -79,10 +90,10 @@ class Cursor(object):
 
     def _fetchBlock(self):
         """ internal use only.
-	 get a block of rows from the server and put in standby block.
-         future enhancements:
-         (1) locks for multithreaded access (protect from multiple calls)
-         (2) allow for prefetch by use of separate thread
+            get a block of rows from the server and put in standby block.
+            future enhancements:
+            (1) locks for multithreaded access (protect from multiple calls)
+            (2) allow for prefetch by use of separate thread
         """
         # make sure that another block request is not standing
         if self._blockRequestInProgress :
@@ -103,16 +114,16 @@ class Cursor(object):
 
     def fetchone(self):
         """ fetch a single row. a lock object is used to assure that a single 
-	 record will be fetched and all housekeeping done properly in a 
-	 multithreaded environment.
-         as getting a block is currently synchronous, this also protects 
-	 against multiple block requests (but does not protect against 
-	 explicit calls to to _fetchBlock())
+            record will be fetched and all housekeeping done properly in a 
+            multithreaded environment.
+            as getting a block is currently synchronous, this also protects 
+            against multiple block requests (but does not protect against 
+            explicit calls to to _fetchBlock())
         """
         self._cursorLock.acquire()
 
         # if there are available records in current block, 
-	# return one and advance counter
+        # return one and advance counter
         if self._currentBlock is not None and self._currentRecordNum < len(self._currentBlock):
            x = self._currentRecordNum
            self._currentRecordNum += 1
@@ -121,12 +132,12 @@ class Cursor(object):
 
         # if no standby block is waiting, fetch a block
         if self._standbyBlock is None:
-           # TODO - make sure exceptions due to problems in getting the block 
-	   # of records from the server are handled properly
-           self._fetchBlock()
+            # TODO - make sure exceptions due to problems in getting the block 
+            # of records from the server are handled properly
+            self._fetchBlock()
 
         # if we still do not have a standby block (or it is empty), 
-	# return None - no more data is available
+        # return None - no more data is available
         if self._standbyBlock is None or len(self._standbyBlock)==0:
            self._cursorLock.release()
            return None
@@ -142,9 +153,9 @@ class Cursor(object):
 
     def fetchmany(self,size=-1):
         """ return a sequential set of records. This is guaranteed by locking, 
-	 so that no other thread can grab a few records while a set is fetched.
-         this has the side effect that other threads may have to wait for 
-         an arbitrary long time for the completion of the current request.
+            so that no other thread can grab a few records while a set is fetched.
+            this has the side effect that other threads may have to wait for 
+            an arbitrary long time for the completion of the current request.
         """
         self._cursorLock.acquire()
 
@@ -160,10 +171,10 @@ class Cursor(object):
 
     def fetchall(self):
         """ returns the remainder of records from the query. This is 
-	 guaranteed by locking, so that no other thread can grab a few records 
-	 while the set is fetched. This has the side effect that other threads 
-	 may have to wait for an arbitrary long time until this query is done 
-	 before they can return (obviously with None).
+            guaranteed by locking, so that no other thread can grab a few records 
+            while the set is fetched. This has the side effect that other threads 
+            may have to wait for an arbitrary long time until this query is done 
+            before they can return (obviously with None).
         """
         self._cursorLock.acquire()
 
@@ -219,16 +230,25 @@ class Cursor(object):
 
     def _fetch(self, rows, fetchReq):
         resultsRes = self.client.FetchResults(fetchReq)
-        for row in resultsRes.results.rows:
-            rowData= []
-            for i, col in enumerate(row.colVals):
-                rowData.append(get_value(col))
-            rows.append(rowData)
-        if len(resultsRes.results.rows) == 0:
-            self.hasMoreRows = False
+        if resultsRes.results:
+            for row in resultsRes.results.rows:
+                rowData= []
+                for i, col in enumerate(row.colVals):
+                    rowData.append(get_value(col))
+                rows.append(rowData)
+            if len(resultsRes.results.rows) == 0:
+                self.hasMoreRows = False
         return rows
 
     def close(self):
         if self.operationHandle is not None:
             req = TCloseOperationReq(operationHandle=self.operationHandle)
             self.client.CloseOperation(req) 
+
+    def setinputsizes( self, sizes ):
+        # PEP 249
+        pass
+
+    def setoutputsize( self, size, column = None ):
+        # PEP 249
+        pass
