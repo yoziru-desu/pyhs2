@@ -1,8 +1,0 @@
-mock>=1.0.0
-pytest
-pytest-cov
-pytest-random
-requests>=1.0.0
-pure-sasl>=0.1.7
-sqlalchemy>=0.5.8
-thrift>=0.8.0
